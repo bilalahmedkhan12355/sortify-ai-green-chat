@@ -90,48 +90,16 @@ const ChatInterface = () => {
 
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar */}
-      <div className="w-64 bg-card border-r border-border p-4 hidden md:flex flex-col">
-        <div className="flex items-center space-x-2 mb-6">
-          <div className="w-8 h-8 bg-gradient-eco rounded-lg flex items-center justify-center">
-            <Recycle className="w-5 h-5 text-white" />
-          </div>
-          <h2 className="font-bold text-lg">Sortify.io</h2>
-        </div>
-        
-        <div className="space-y-2 flex-1">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">Quick Actions</h3>
-          {quickActions.map((action, index) => (
-            <Button
-              key={index}
-              variant="ghost"
-              className="w-full justify-start text-left h-auto p-3"
-              onClick={() => setInputValue(action.text)}
-            >
-              <action.icon className="w-4 h-4 mr-2 text-primary" />
-              <span className="text-sm">{action.text}</span>
-            </Button>
-          ))}
-        </div>
-
-        <div className="mt-auto pt-4 border-t border-border">
-          <p className="text-xs text-muted-foreground text-center">
-            Made with 💚 for a sustainable future
-          </p>
-        </div>
-      </div>
-
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <div className="border-b border-border p-4 bg-card">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <Button variant="ghost" size="sm" className="md:hidden">
-                <Menu className="w-5 h-5" />
-              </Button>
+              <div className="w-8 h-8 bg-gradient-eco rounded-lg flex items-center justify-center">
+                <Recycle className="w-5 h-5 text-white" />
+              </div>
               <div>
-                <h1 className="font-semibold">Chat with Sortify</h1>
+                <h1 className="font-semibold">Sortify.io</h1>
                 <p className="text-sm text-muted-foreground">Your AI recycling assistant</p>
               </div>
             </div>
@@ -142,35 +110,67 @@ const ChatInterface = () => {
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.isUser ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
-            >
-              <div className={message.isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}>
-                <p className="text-sm leading-relaxed">{message.text}</p>
-                <p className={`text-xs mt-1 ${message.isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {/* Messages or Welcome Screen */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {messages.length === 1 ? (
+            /* Welcome Screen */
+            <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto text-center space-y-8">
+              <div className="space-y-4">
+                <h1 className="text-4xl font-bold bg-gradient-eco bg-clip-text text-transparent">
+                  How can I help you today?
+                </h1>
+                <p className="text-muted-foreground text-lg">
+                  I'm your AI recycling assistant. Ask me about waste sorting, recycling centers, or sustainable practices.
                 </p>
               </div>
-            </div>
-          ))}
-          
-          {isTyping && (
-            <div className="flex justify-start animate-scale-in">
-              <div className="chat-bubble-ai">
-                <div className="typing-indicator">
-                  <div className="typing-dot" style={{ '--delay': '0ms' } as any}></div>
-                  <div className="typing-dot" style={{ '--delay': '150ms' } as any}></div>
-                  <div className="typing-dot" style={{ '--delay': '300ms' } as any}></div>
-                </div>
+
+              {/* Quick Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl">
+                {quickActions.map((action, index) => (
+                  <Button
+                    key={index}
+                    variant="outline"
+                    className="p-6 h-auto flex flex-col items-center space-y-3 hover:bg-primary/5 transition-colors"
+                    onClick={() => setInputValue(action.text)}
+                  >
+                    <action.icon className="w-6 h-6 text-primary" />
+                    <span className="text-sm font-medium">{action.text}</span>
+                  </Button>
+                ))}
               </div>
             </div>
+          ) : (
+            /* Chat Messages */
+            <div className="space-y-4 max-w-4xl mx-auto">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.isUser ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
+                >
+                  <div className={message.isUser ? 'chat-bubble-user' : 'chat-bubble-ai'}>
+                    <p className="text-sm leading-relaxed">{message.text}</p>
+                    <p className={`text-xs mt-1 ${message.isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              
+              {isTyping && (
+                <div className="flex justify-start animate-scale-in">
+                  <div className="chat-bubble-ai">
+                    <div className="typing-indicator">
+                      <div className="typing-dot" style={{ '--delay': '0ms' } as any}></div>
+                      <div className="typing-dot" style={{ '--delay': '150ms' } as any}></div>
+                      <div className="typing-dot" style={{ '--delay': '300ms' } as any}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </div>
           )}
-          
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Input Area */}
