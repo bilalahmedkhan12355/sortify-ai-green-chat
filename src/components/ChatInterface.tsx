@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Send, Recycle, Trash2, Leaf, Menu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Message {
   id: string;
@@ -24,6 +25,7 @@ const ChatInterface = ({ chatId, onChatCreated }: ChatInterfaceProps) => {
   const [isTyping, setIsTyping] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | undefined>(chatId);
   const { toast } = useToast();
+  const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,7 +88,6 @@ const ChatInterface = ({ chatId, onChatCreated }: ChatInterfaceProps) => {
 
   const createOrUpdateChat = async (firstMessage: string): Promise<string> => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
       if (currentChatId) {
