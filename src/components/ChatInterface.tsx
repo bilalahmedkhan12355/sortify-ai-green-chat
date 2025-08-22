@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Send, Recycle, Trash2, Leaf, Menu } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Message {
   id: string;
@@ -12,18 +13,40 @@ interface Message {
   timestamp: Date;
 }
 
-const ChatInterface = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      text: "Hello! I'm Sortify, your AI recycling assistant. I can help you sort waste, find recycling centers, and learn about sustainable practices. What would you like to know?",
-      isUser: false,
-      timestamp: new Date(),
-    },
-  ]);
+interface ChatInterfaceProps {
+  chatId?: string;
+  onChatCreated?: (chatId: string) => void;
+}
+
+const ChatInterface = ({ chatId, onChatCreated }: ChatInterfaceProps) => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | undefined>(chatId);
+  const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatId && chatId !== currentChatId) {
+      setCurrentChatId(chatId);
+      loadChatMessages(chatId);
+    } else if (!chatId && currentChatId) {
+      setCurrentChatId(undefined);
+      setMessages([]);
+    }
+  }, [chatId]);
+
+  useEffect(() => {
+    if (messages.length === 0 && !chatId) {
+      // Show welcome message for new chats
+      setMessages([{
+        id: "welcome",
+        text: "Hello! I'm Sortify, your AI recycling assistant. I can help you sort waste, find recycling centers, and learn about sustainable practices. What would you like to know?",
+        isUser: false,
+        timestamp: new Date(),
+      }]);
+    }
+  }, [messages, chatId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -33,31 +56,137 @@ const ChatInterface = () => {
     scrollToBottom();
   }, [messages]);
 
+  const loadChatMessages = async (chatId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const loadedMessages: Message[] = data?.map(msg => ({
+        id: msg.id,
+        text: msg.content,
+        isUser: msg.role === 'user',
+        timestamp: new Date(msg.created_at)
+      })) || [];
+
+      setMessages(loadedMessages);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load chat messages",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const createOrUpdateChat = async (firstMessage: string): Promise<string> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      if (currentChatId) {
+        return currentChatId;
+      }
+
+      // Create new chat
+      const { data, error } = await supabase
+        .from('chats')
+        .insert({
+          user_id: user.id,
+          title: firstMessage.substring(0, 50) || 'New Chat'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newChatId = data.id;
+      setCurrentChatId(newChatId);
+      onChatCreated?.(newChatId);
+      return newChatId;
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create chat",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const saveMessage = async (chatId: string, content: string, role: 'user' | 'assistant') => {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          chat_id: chatId,
+          content,
+          role
+        });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save message",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputValue,
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    const messageText = inputValue;
     setInputValue("");
-    setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: getAIResponse(inputValue),
-        isUser: false,
+    try {
+      // Create or get chat ID
+      let activeChatId = currentChatId;
+      if (!activeChatId) {
+        activeChatId = await createOrUpdateChat(messageText);
+      }
+
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        text: messageText,
+        isUser: true,
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, aiResponse]);
+
+      setMessages((prev) => [...prev.filter(m => m.id !== "welcome"), userMessage]);
+      setIsTyping(true);
+
+      // Save user message
+      await saveMessage(activeChatId, messageText, 'user');
+
+      // Simulate AI response
+      setTimeout(async () => {
+        const aiResponseText = getAIResponse(messageText);
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          text: aiResponseText,
+          isUser: false,
+          timestamp: new Date(),
+        };
+        
+        setMessages((prev) => [...prev, aiResponse]);
+        setIsTyping(false);
+
+        // Save AI response
+        await saveMessage(activeChatId, aiResponseText, 'assistant');
+      }, 1500);
+    } catch (error) {
       setIsTyping(false);
-    }, 1500);
+      console.error('Error sending message:', error);
+    }
   };
 
   const getAIResponse = (userInput: string): string => {
@@ -89,27 +218,8 @@ const ChatInterface = () => {
   ];
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-full bg-background">
       <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="border-b border-border p-4 bg-card">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-gradient-eco rounded-lg flex items-center justify-center">
-                <Recycle className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="font-semibold">Sortify.io</h1>
-                <p className="text-sm text-muted-foreground">Your AI recycling assistant</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-2 h-2 bg-success rounded-full animate-pulse"></div>
-              <span className="text-sm text-muted-foreground">Online</span>
-            </div>
-          </div>
-        </div>
-
         {/* Messages or Welcome Screen */}
         <div className="flex-1 overflow-y-auto p-4">
           {messages.length === 1 ? (
